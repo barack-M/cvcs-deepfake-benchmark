@@ -1,0 +1,17 @@
+# Cache Python (si rigenerano, non vanno su git)
+__pycache__/
+*.pyc
+
+# Dati / pesi / output: stanno su /work, MAI nel repo
+data/
+datasets/
+weights/
+checkpoints/
+results/
+outputs/
+*.pth
+*.parquet
+
+# IDE e robaccia di sistema
+.idea/
+.DS_Store

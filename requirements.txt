@@ -1,0 +1,11 @@
+# Librerie del progetto (condivise — su git).
+# NB: torch/torchvision NON sono qui: vanno installati scegliendo la build
+# compatibile con la CUDA del cluster, quando faremo girare i detector.
+
+huggingface_hub
+datasets
+pandas
+pyarrow
+pillow
+scikit-learn
+matplotlib
