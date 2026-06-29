@@ -30,7 +30,9 @@ GPT-Image, ...). Documentare e spiegare *dove e perché* ogni detector crolla è
 
 ### Dove sta cosa (vale per entrambi; `<username>` = mbaracchi / eranieri)
 - **Codice** → nella propria HOME: `/homes/<username>/cvcs2026/cvcs-deepfake-benchmark` (clone git)
-- **Python** → anaconda di sistema (già installato da admin, ha datasets/pandas/pyarrow/pillow/... — **niente venv**)
+- **Python** → venv `/homes/<username>/cvcs2026/venv` creato con `python3 -m venv --system-site-packages`
+  (versione di sistema: **Python 3.10.12**; eredita i pacchetti di sistema, evita di esaurire la quota inode).
+  Attivare sempre con `source /homes/<username>/cvcs2026/venv/bin/activate`. Dettagli in `info_server.md` §5.
 - **Dati, pesi, feature, risultati** → cartella condivisa `/work/cvcs2026/deep_pixels/` (BeeGFS):
   - `datasets/` → parquet/subset (D3, OpenFake, ...)
   - `weights/` → i `.pth` pre-addestrati dei detector
@@ -73,21 +75,26 @@ Legenda: [ ] da fare · [~] in corso · [x] fatto
 - [x] Repo GitHub creata e clonata (locale + home di entrambi sul server)
 - [x] Chiarito con tutor: accesso dataset (HuggingFace) e organizzazione filesystem
 - [x] Cartelle su /work: `datasets/`, `weights/`, `features/`, `results/`
-- [x] PyCharm remote (SSH interpreter su Python di sistema + Deployment)
-- [x] Verificato che il Python di sistema ha i pacchetti base (no venv)
+- [x] PyCharm remote (SSH interpreter su venv + Deployment)
+- [x] Venv creato (`python3 -m venv --system-site-packages /homes/<username>/cvcs2026/venv`) — Python 3.10.12
+- [x] Pacchetti installati nel venv: `huggingface_hub datasets pyarrow fsspec`
 - [ ] Clonare CoDE e/o DeepfakeBench nelle home (dipende dalla decisione D5, §8)
 
-### Dati  (esplorazione FATTA, download DA FARE)
+### Dati
 - [x] Esplorato D3 (train/validation/external_test) — struttura nota (vedi §3.1)
 - [x] Esplorato OpenFake (core train/test) — struttura e generatori noti (vedi §3.2)
-- [ ] Decidere il design definitivo coi punti aperti (§8), poi:
-- [ ] `build_subset.py`: costruire pool da 3 fonti (GAN/ForenSynths + D3 + OpenFake test), bilanciato per
-      generatore e real/fake, seed fisso
-- [ ] Scaricare il test set GAN di UniversalFakeDetect/ForenSynths (CNN_synth_testset) in `datasets/`
+- [x] D3 validation scaricato: 11 shard, 4.83 GB, 4.800 righe totali (= 4.800 img/generatore)
+      → `/work/cvcs2026/deep_pixels/datasets/D3/data/validation-*.parquet`
+- [x] `build_subset.py` scritto: estrae immagini fake da D3, **n=4800 (intero validation), seed=42**
+      → output: `D3/images/{deepfloyd,sd14,sd21,sdxl}/` + `D3/manifest.csv`
+- [x] Lancio di `build_subset.py` (estratte 19.200 JPEG fake D3 e allineato il manifest)
+- [x] Scaricare il test set GAN di UniversalFakeDetect/ForenSynths (CNN_synth_testset) in `datasets/`
+      → Eseguito download parallelo ed estrazione selettiva (progan, stylegan, cyclegan, max 1000 img/classe, 6.000 img totali) + generato manifest allineato.
+- [x] OpenFake `core/test`: scaricato l'intero test set (68 GB in Parquet) + generato manifest allineato basato su indici (91.398 righe).
 - [ ] Per le fake di D3 usare reali da OpenFake (D3 non ha reali embedded)
-- [ ] Salvare le liste di file/indici dei subset + annotare numerosità e seed
+- [x] Salvare la lista di file/indici dei subset + annotare numerosità nel report (Fatto in `info.md` e nei manifest)
 
-### Detector  (decisi: CoDE + UniversalFakeDetect; terzo IN DECISIONE → Effort?, vedi §5.3/§8)
+### Detector  (decisi: CoDE + UniversalFakeDetect; terzo IN DECISIONE → Effort?, vedi §5.3/§8)i: CoDE + UniversalFakeDetect; terzo IN DECISIONE → Effort?, vedi §5.3/§8)
 - [ ] CoDE: estendere la bozza di inferenza (Enrico) a un dataset intero
 - [ ] Decidere il terzo detector (Effort?) e verificarne pesi pubblici + dataset di training
 - [ ] Reperire pesi pre-addestrati dei 3 detector → in `/work/.../weights`
@@ -149,7 +156,7 @@ Legenda: [ ] da fare · [~] in corso · [x] fatto
   se troppo grande, subset fisso **50k–100k**, bilanciato per generatore e real/fake).
 - **Ispezione (istantanea):** `python scripts/explore_hf_dataset.py --repo ComplexDataLab/OpenFake --config core --split test --api`
 
-### 3.4 Test set di UniversalFakeDetect (ForenSynths) — famiglia GAN-based  ✅ DECISO (risolve D1)
+### 3.3 Test set di UniversalFakeDetect (ForenSynths) — famiglia GAN-based  ✅ DECISO (risolve D1)
 - **Cos'è:** il set di valutazione di Ojha et al. (CVPR 2023), costruito su **ForenSynths** (Wang 2020).
   Immagini full-frame (oggetti/scene da LSUN/ImageNet) **con le reali appaiate incluse**, da molti generatori.
 - **Generatori GAN che usiamo:** ProGAN, StyleGAN, StyleGAN2, BigGAN, CycleGAN, StarGAN, GauGAN.
@@ -160,8 +167,7 @@ Legenda: [ ] da fare · [~] in corso · [x] fatto
 - **⚠️ In-distribution per UniversalFakeDetect e CNNDetection** (addestrati su ProGAN) → su questo set vanno
   benissimo (atteso, da dichiarare). Per **CoDE** (diffusion-trained) i GAN sono NON visti → atteso crollo.
   → confronto perfetto: stesso set fa brillare un detector e crollare un altro a seconda del training.
-- **Dove:** repo UniversalFakeDetect (Ojha) — fornisce i link; il pezzo GAN è il "CNN_synth_testset" di
-  CNNDetection (Wang). Da scaricare in `/work/cvcs2026/deep_pixels/datasets/`.
+- **Dove:** repo UniversalFakeDetect (Ojha) / CNNDetection (Wang). Scaricato in `/work/cvcs2026/deep_pixels/datasets/GAN/` tramite lo script `scripts/download_gan_dataset.py`, che scarica lo zip da Hugging Face (`sywang/CNNDetection`). Per evitare di sforare la quota disco (~19 GB scompattato), lo script esegue un'**estrazione selettiva**: estrae solo le immagini per i generatori target (`progan`, `stylegan`, `cyclegan`) limitandosi a un massimo di 1000 immagini reali (`0_real`) e 1000 immagini fake (`1_fake`) per generatore. Questo riduce la dimensione finale a circa **600 MB (6.000 file totali)** ed evita il blocco degli inode. Crea automaticamente il manifest CSV (`manifest.csv`).
 
 ### Subset & riproducibilità (regola trasversale)
 - Ogni subset: **seed fisso**, salvare la **lista di file/indici** selezionati, bilanciare real/fake e per-generatore.
@@ -293,10 +299,11 @@ Slot del prof: *"any recent detector available on DeepfakeBench"*. Opzioni:
 ---
 
 ## 7. STATO ATTUALE (a colpo d'occhio)
-- ✅ Infrastruttura pronta (server, repo, PyCharm, cartelle /work, Python).
+- ✅ Infrastruttura pronta (server, venv Python 3.10.12, repo, PyCharm, cartelle /work).
 - ✅ Esplorazione dati completa: sappiamo com'è fatto D3 e OpenFake.
-- ⏳ Bloccati sulle **decisioni di design (§8)**: vanno prese insieme prima di scrivere `build_subset.py`.
-- ⏭️ Prossimo codice: `build_subset.py` (costruzione subset bilanciato con seed), poi inferenza detector.
+- ✅ D3 validation scaricato (4.83 GB, 11 shard, 4.800 img/generatore).
+- ✅ `build_subset.py` scritto e lanciato (n=4800, seed=42 → 19.200 JPEG fake D3).
+- ⏭️ Prossimo: scaricare OpenFake `core/test` + ForenSynths, poi pesi detector, poi inferenza.
 
 ---
 
@@ -318,8 +325,10 @@ Slot del prof: *"any recent detector available on DeepfakeBench"*. Opzioni:
 - **D-det — Terzo detector:** Effort (recente, in-dominio, su DeepfakeBench) vs altro. Propensione: Effort,
   ma è CLIP-based come UniversalFakeDetect (poca diversità architetturale). Verificare pesi+training di Effort.
   CNNDetection scartato (troppo vecchio), Xception scartato (volti). (vedi §5.3)
-- **D7 — Numerosità subset + seed:** quanti esempi per generatore? (tutor: ~50k–100k totali per OpenFake test,
-  bilanciato). Quanti per i 4 generatori D3? Fissare il SEED.
+- **D7 — Numerosità subset + seed:** ✅ PARZIALMENTE RISOLTO:
+  - **D3:** n=4.800/generatore (intero validation split, no campionamento), **seed=42**.
+    Motivazione: validation = no leakage per CoDE; 4.800 ≈ 5k (fascia tutor: 5k–20k).
+  - **OpenFake test:** ⏳ da decidere (tutor: 50k–100k totali, bilanciato per generatore e real/fake).
 - **D8 — Test di compressione social:** lo facciamo? Il prof lo cita esplicitamente ("Under social-media
   compression?") → punto a favore. Ricompressione JPEG stile WhatsApp sul pool, e si rimisurano le metriche.
 
@@ -336,3 +345,12 @@ Slot del prof: *"any recent detector available on DeepfakeBench"*. Opzioni:
 - 2026-06-25 — Design allineato a tutor: OpenFake `core/test` = target OOD; D3 = ancora in-distribution "vecchi".
   Verificato: GAN assenti in D3/OpenFake (solo diffusion); DF40 ha GAN ma di volti; fonte GAN full-frame =
   ForenSynths/UniversalFakeDetect. Aperte le decisioni D1–D8 → da prendere insieme.
+- 2026-06-29 — Ambiente Python risolto: `python3` di sistema (3.10.12) + venv con `--system-site-packages`
+  in `/homes/mbaracchi/cvcs2026/venv`. Nota: `python` = Python 2 sul server, usare sempre `python3` per creare
+  il venv; poi all'interno del venv attivato `python` funziona correttamente.
+- 2026-06-29 — D3 validation scaricato: tutti e 11 gli shard, 4.83 GB, 34 secondi a 80–100 MB/s.
+  Righe totali: **4.800** (437 per shard × 11). Ogni riga = 4 img fake (gen0..3). Path:
+  `/work/cvcs2026/deep_pixels/datasets/D3/data/validation-*.parquet`.
+- 2026-06-29 — Decisione D7 (D3): **n=4.800/generatore, seed=42** (intero validation split, nessun
+  campionamento). Usare validation evita data-leakage con CoDE (addestrato su D3 train).
+  Script `scripts/build_subset.py` scritto e lanciato → estrae 19.200 JPEG in `D3/images/` + `D3/manifest.csv`.
