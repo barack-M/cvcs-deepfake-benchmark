@@ -129,113 +129,16 @@ I manifest sono pronti e formattati in modo coerente.
 
 ---
 
+---
+
 ## 4. GUIDA ALL'IMPLEMENTAZIONE DEL DATALOADER (PYTORCH)
 
-Questa sezione fornisce un template di riferimento in Python per caricare i tre dataset in modo unificato all'interno della pipeline di valutazione. Gestisce in modo trasparente il caricamento da file fisici (GAN e reali D3) e da file Parquet (OpenFake e fake D3).
+La classe dataset unificata è stata implementata e si trova nel file sorgente **[`src/data/dataset.py`](file:///Users/barack/Desktop/Computer_Vision/Lab/code/cvcs-deepfake-benchmark/src/data/dataset.py)**. 
 
-### Codice di riferimento per `dataset_loader.py`
-
-```python
-# -*- coding: utf-8 -*-
-import os
-import io
-import pandas as pd
-import torch
-from torch.utils.data import Dataset
-from PIL import Image
-import pyarrow.parquet as pq
-
-class UnifiedDeepfakeDataset(Dataset):
-    def __init__(self, manifest_path, openfake_parquet_dir=None, d3_parquet_dir=None, transform=None):
-        """
-        Dataloader unificato per la valutazione dei detector di deepfake.
-        """
-        self.df = pd.read_csv(manifest_path)
-        self.transform = transform
-        
-        # Inizializziamo i lettori Parquet solo se necessario
-        self.openfake_parquet_dir = openfake_parquet_dir
-        self.d3_parquet_dir = d3_parquet_dir
-        
-        self.openfake_dataset = None
-        self.d3_dataset = None
-
-    def _get_openfake_dataset(self):
-        # Caricamento lazy per evitare di sovraccaricare la memoria dei thread secondari
-        import datasets
-        if self.openfake_dataset is None:
-            # Carica la directory contenente i 13 file parquet
-            self.openfake_dataset = datasets.load_dataset(
-                "parquet", 
-                data_files=os.path.join(self.openfake_parquet_dir, "*.parquet"), 
-                split="train"  # I parquet di test_set/core sono etichettati come train di default da HF se non diversamente specificato
-            )
-        return self.openfake_dataset
-
-    def _get_d3_dataset(self):
-        import datasets
-        if self.d3_dataset is None:
-            self.d3_dataset = datasets.load_dataset(
-                "parquet", 
-                data_files=os.path.join(self.d3_parquet_dir, "*.parquet"), 
-                split="train"
-            )
-        return self.d3_dataset
-
-    def __len__(self):
-        return len(self.df)
-
-    def __getitem__(self, idx):
-        row = self.df.iloc[idx]
-        dataset = row["dataset"]
-        label = int(row["label"])
-        generator = row["generator"]
-        
-        # 1. CARICAMENTO IMMAGINE
-        img = None
-        
-        if dataset == "forensynth":
-            # GAN: Caricamento standard da file PNG
-            img = Image.open(row["path"]).convert("RGB")
-            
-        elif dataset == "d3":
-            if label == 0:
-                # D3 Reale: Caricamento da file immagine (LAION)
-                img = Image.open(row["path"]).convert("RGB")
-            else:
-                # D3 Fake: Caricamento lazy dal Parquet locale
-                d3_ds = self._get_d3_dataset()
-                parquet_idx = int(row["index"])
-                
-                # Mappatura delle colonne dei generatori nel Parquet D3
-                # gen0 = deepfloyd | gen1 = sd14 | gen2 = sd21 | gen3 = sdxl
-                gen_col_map = {"deepfloyd": "image_gen0", "sd14": "image_gen1", "sd21": "image_gen2", "sdxl": "image_gen3"}
-                col_name = gen_col_map[generator]
-                
-                # Estraiamo i byte grezzi
-                raw_data = d3_ds[parquet_idx][col_name]
-                if isinstance(raw_data, dict):
-                    raw_data = raw_data.get("bytes")
-                
-                img = Image.open(io.BytesIO(raw_bytes)).convert("RGB")
-                
-        elif dataset == "openfake":
-            # OpenFake (reals e fakes): Caricamento dal dataset Parquet
-            openfake_ds = self._get_openfake_dataset()
-            parquet_idx = int(row["index"])
-            
-            raw_data = openfake_ds[parquet_idx]["image"]
-            if isinstance(raw_data, dict):
-                raw_data = raw_data.get("bytes")
-                
-            img = Image.open(io.BytesIO(raw_bytes)).convert("RGB")
-
-        # 2. APPLICAZIONE TRASFORMAZIONI (Preprocessing)
-        if self.transform:
-            img = self.transform(img)
-            
-        return img, label, generator, dataset
-```
+### Utilizzo del DataLoader
+Il dataloader gestisce in modo trasparente il caricamento da file fisici (GAN e reali D3) e da file Parquet (OpenFake e fake D3). 
+* **Input `idx`:** Il parametro `idx` in `__getitem__(self, idx)` corrisponde all'indice di riga del file **`manifest.csv` unificato** (da `0` a `N-1`).
+* **Funzionamento:** A runtime, il dataset legge la riga `idx` del manifest, rileva la sorgente (`forensynth`, `d3`, o `openfake`), recupera il percorso dell'immagine (se fisica) o l'indice di riga originario del file Parquet (se tabellare), carica i pixel in memoria come PIL Image, applica il preprocessing e restituisce la tupla: `(img, label, generator, dataset)`.
 
 ---
 
@@ -251,3 +154,10 @@ class UnifiedDeepfakeDataset(Dataset):
   * Lanciato `check_d3_urls.py`: identificati 3.515 URL vivi escludendo i file non conformi (corrotti, 1x1 pixel).
   * Lanciato `download_d3_reals_secure.py`: scaricate in binario puro esattamente **3.000 immagini reali** ed eliminati i file orfani generati in background dai thread.
   * Generato `manifest.csv` D3 bilanciato a 15.000 righe totali. Spazio totale: **5.2 GB**.
+* **2026-06-30 — Setup UniversalFakeDetect (UFD):**
+  * Creato `src/data/dataset.py` per isolare il caricamento dati.
+  * Aggiunte le dipendenze di CLIP (`ftfy`, `regex`, `tqdm`, `git+CLIP`) in `requirements.txt`.
+  * Clonato UFD in `UniversalFakeDetect/` (ignorato in `.gitignore`).
+  * Scaricati i pesi `fc_weights.pth` su `/work/.../weights/ufd/`.
+  * Eseguito con successo `scripts/test_ufd_setup.py` (inferenza mock OK).
+

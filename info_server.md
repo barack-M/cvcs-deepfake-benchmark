@@ -141,14 +141,14 @@ squota          # controllare che la quota file non esploda
 - PyCharm SSH interpreter → puntare a `/homes/mbaracchi/cvcs2026/venv/bin/python`.
 - `requirements.txt` (su git) = ciò che installiamo NOI sopra la base (per ora ~niente; torch poi).
 
-**Nota torch/CUDA:** installare nel venv con `pip install --no-cache-dir torch torchvision` scegliendo la
-build per la CUDA del cluster (CUDA 12.6 default; su login-02 le GPU vogliono CUDA 11.8 → meglio girare su
-nodi di calcolo via SLURM). In alternativa esiste il modulo `pytorch/...` del cluster.
-Non installare torch nel sistema manualmente — usare il modulo.
+**Nota torch/CUDA:** Installare nel venv con `pip install --no-cache-dir torch torchvision`. 
+* **Perché via pip nel venv e non via moduli?** I moduli di PyTorch forniti dall'amministratore (Spack) sono compilati per i nodi di calcolo GPU e **non sono visibili o caricabili sul login node** (`ailb-login-02`). Installarlo localmente nel venv con `pip` garantisce che il codice si compili ed esegua ovunque.
+* **⚠️ Warning CUDA sul login node:** Quando si esegue `torch.cuda.is_available()` sul login node, esso restituirà `False` e mostrerà un avviso inerente i driver NVIDIA obsoleti (`found version 11040`). Questo comportamento è **normale**: il login node non ha driver grafici attivi. Quando lo script girerà su nodo di calcolo (via SLURM), CUDA funzionerà a pieno regime.
 
 ---
 
 ## 6. SLURM — eseguire sui nodi di calcolo (specie con GPU)
+
 
 **Concetto:** il login node è condiviso e **non va usato per calcolo pesante / GPU**. Per girare modelli
 si chiede un nodo di calcolo a SLURM (lo scheduler), che mette in coda e assegna risorse.
@@ -281,8 +281,8 @@ squota                   # quota (NON du su /work intero)
 ---
 
 ## DA VERIFICARE / TODO server
-- [x] Nessun venv necessario: il cluster ha anaconda con tutti i pacchetti base già installati
-- [ ] Trovare il path esatto del Python con `which python` e aggiornarlo in §5
+- [x] Nessun venv necessario: il cluster ha anaconda con tutti i pacchetti base già installati (Smarcato: ereditati via `--system-site-packages`).
+- [x] Trovare il path esatto del Python (Smarcato: `/homes/mbaracchi/cvcs2026/venv/bin/python` e python3.10 come base venv).
 - [ ] Nome esatto della partition GPU per l'account `cvcs2026` (all_usr_prod?) e limiti (tempo/numero GPU)
 - [ ] Esiste una sotto-quota per `deep_pixels` o si pesca dai 4 TB comuni del corso? (chiedere ai tutor)
-- [ ] Conviene PyTorch da modulo o da pip nel venv? (riproducibilità vs comodità)
+- [x] Conviene PyTorch da modulo o da pip nel venv? (Smarcato: Usato `pip` nel venv per compatibilità con il login node, poiché i moduli non sono disponibili lì).

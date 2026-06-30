@@ -1,7 +1,11 @@
 # Librerie del progetto (condivise — su git).
-# NB: torch/torchvision NON sono qui: vanno installati scegliendo la build
-# compatibile con la CUDA del cluster, quando faremo girare i detector.
+# Nota: Prima di installare questo file, installa sempre PyTorch e TorchVision
+# specificando l'index-url per la GPU e senza cache (per non sforare la quota NFS):
+#
+#   pip install --no-cache-dir torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu121
+#
 
+# Base dati & utility
 huggingface_hub
 datasets
 pandas
@@ -9,3 +13,14 @@ pyarrow
 pillow
 scikit-learn
 matplotlib
+tqdm
+python-dateutil
+pytz
+tzdata
+typing-extensions
+
+# Dipendenze richieste da CLIP (per UniversalFakeDetect e CoDE)
+ftfy
+regex
+wcwidth
+git+https://github.com/openai/CLIP.git

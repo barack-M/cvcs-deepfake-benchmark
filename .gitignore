@@ -3,15 +3,22 @@ __pycache__/
 *.pyc
 
 # Dati / pesi / output: stanno su /work, MAI nel repo
-data/
-datasets/
-weights/
-checkpoints/
-results/
-outputs/
+/data/
+/datasets/
+/weights/
+/checkpoints/
+/results/
+/outputs/
 *.pth
 *.parquet
 
 # IDE e robaccia di sistema
 .idea/
 .DS_Store
+
+# Repository esterne (gestite via PyCharm Deployment, ignorate da git)
+UniversalFakeDetect/
+
+# Log di SLURM
+logs/
+!logs/.gitkeep
