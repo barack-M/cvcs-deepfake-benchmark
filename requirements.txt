@@ -18,6 +18,9 @@ python-dateutil
 pytz
 tzdata
 typing-extensions
+httpcore
+httpx
+tabulate
 
 # Dipendenze richieste da CLIP (per UniversalFakeDetect e CoDE)
 ftfy

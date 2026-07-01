@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH --job-name=ufd_gan_eval
+#SBATCH --job-name=ufd_d3_eval
 #SBATCH --partition=all_usr_prod
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=16G
 #SBATCH --time=01:00:00
-#SBATCH --output=logs/job_ufd_gan_%j.out
+#SBATCH --output=logs/job_ufd_d3_%j.out
 #SBATCH --account=cvcs2026
 
 # Scarica eventuali moduli CUDA precaricati e carica la versione desiderata
@@ -20,9 +20,9 @@ conda activate base
 # Attiva il virtual environment
 source /homes/mbaracchi/cvcs2026/venv/bin/activate
 
-# Esegui la valutazione sul dataset GAN
-python scripts/evaluate_ufd_gan.py \
-    --manifest /work/cvcs2026/deep_pixels/datasets/GAN/manifest.csv \
-    --output /work/cvcs2026/deep_pixels/results/ufd-gan.csv \
-    --batch_size 64 \
-    --num_workers 4
+# Esegui la valutazione ottimizzata sul dataset D3
+python scripts/evaluate_ufd_d3.py \
+    --manifest /work/cvcs2026/deep_pixels/datasets/D3/manifest.csv \
+    --parquet_dir /work/cvcs2026/deep_pixels/datasets/D3/data \
+    --output /work/cvcs2026/deep_pixels/results/ufd-d3.csv \
+    --batch_size 64

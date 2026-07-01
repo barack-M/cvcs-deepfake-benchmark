@@ -129,6 +129,22 @@ I manifest sono pronti e formattati in modo coerente.
 
 ---
 
+## 3.5. DETECTOR — DETTAGLI TECNICI E ARCHITETTURE
+
+Per questo benchmark confrontiamo le capacità di generalizzazione cross-generator di due rilevatori universali rappresentativi dello stato dell'arte basati su paradigmi e filosofie differenti:
+
+### A. UniversalFakeDetect (UFD)
+* **Autori & Pubblicazione:** University of Wisconsin-Madison (Ojha et al.), CVPR 2023.
+* **Architettura:** Backbone pre-addestrato **CLIP (ViT-L/14)** (con pesi congelati) accoppiato a una testa di classificazione lineare (**Linear Classifier**) addestrata ad hoc.
+* **Allenamento:** Il classificatore lineare (`fc_weights.pth`) è stato addestrato esclusivamente sulle feature estratte dalle immagini reali e fake generate da **ProGAN** (20 modelli differenti).
+* **Meccanismo:** Sfrutta lo spazio semantico latente di CLIP, già robusto e pre-addestrato su miliardi di coppie immagine-testo dal web. Rileva impronte digitali geometriche e anomalie locali ad alta frequenza tipiche delle reti convoluzionali (GAN). Generalizza egregiamente all'interno della famiglia delle GAN, ma si trova fuori calibrazione (con punteggi schiacciati vicino allo zero) e viene ingannato sistematicamente dalle diffusion moderne che producono immagini molto "lisce" nel dominio delle frequenze (es. su OpenFake l'AUROC generale scende a 0.41).
+
+### B. CoDE (Contrastive Deepfake Embeddings)
+* **Autori & Pubblicazione:** AImageLab, UNIMORE (Ranieri et al.), ECCV 2024.
+* **Architettura:** Rete neurale basata su **ViT-Tiny** (Vision Transformer Tiny), ottimizzata per bilanciare alta accuratezza e bassa impronta di memoria/alto throughput per uso pratico.
+* **Allenamento:** Addestrato sul massivo dataset proprietario **D3** (9.2 milioni di immagini generate da 4 modelli a diffusione: Stable Diffusion 1.4, 2.1, SDXL, e DeepFloyd).
+* **Meccanismo:** Utilizza una funzione di perdita contrastiva (Contrastive Loss) abbinata a una modellizzazione esplicita della **similarità globale-locale** (global-local similarities). A differenza di CLIP, si concentra sui dettagli strutturali intrinseci e sulle incongruenze spettrali delle generazioni text-to-image a diffusione. Mostra una robustezza generale migliore sui modelli a diffusione (AUROC 0.62 su OpenFake), ma subisce forti inversioni prestazionali di fronte a generatori fotorealistici di ultimissima generazione non visti in fase di training (come Flux.2).
+
 ---
 
 ## 4. GUIDA ALL'IMPLEMENTAZIONE DEL DATALOADER (PYTORCH)

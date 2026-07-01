@@ -33,9 +33,9 @@ clip_transform = Compose([
 ])
 
 def main():
-    parser = argparse.ArgumentParser(description="Valutazione del modello UniversalFakeDetect (UFD)")
+    parser = argparse.ArgumentParser(description="Valutazione del modello UniversalFakeDetect (UFD) su GAN")
     parser.add_argument("--manifest", type=str, default="/work/cvcs2026/deep_pixels/datasets/GAN/manifest.csv",
-                        help="Percorso al file manifest.csv")
+                        help="Percorso al file manifest.csv di GAN")
     parser.add_argument("--batch_size", type=int, default=64, help="Dimensione del batch")
     parser.add_argument("--num_workers", type=int, default=4, help="Numero di thread del dataloader")
     parser.add_argument("--output", type=str, default="/work/cvcs2026/deep_pixels/results/ufd-gan.csv",
@@ -66,8 +66,6 @@ def main():
         transform=clip_transform
     )
     
-    # Per il dataset GAN (CNN_synth) non ci sono file parquet, quindi il dataloader 
-    # esegue solo letture di immagini fisiche da disco, risultando estremamente efficiente.
     dataloader = DataLoader(
         dataset, 
         batch_size=args.batch_size, 
@@ -83,7 +81,6 @@ def main():
         for i, (imgs, labels, generators, datasets) in enumerate(tqdm(dataloader, desc="Inference batches")):
             imgs = imgs.to(device)
             outputs = model(imgs)
-            # UFD restituisce logits, applichiamo la sigmoid per ottenere le probabilità
             probs = torch.sigmoid(outputs).cpu().numpy()
             
             # Calcoliamo gli indici globali del batch rispetto al manifest
