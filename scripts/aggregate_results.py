@@ -19,7 +19,7 @@ def calculate_eer(y_true, y_scores):
     return eer, optimal_threshold
 
 def main():
-    results_dir = Path("/work/cvcs2026/deep_pixels/results")
+    results_dir = Path(__file__).resolve().parent.parent / "results"
     if not results_dir.exists():
         print(f"Errore: La cartella dei risultati {results_dir} non esiste.")
         return
@@ -44,6 +44,7 @@ def main():
     print("=" * 70)
 
     summary_rows = []
+    all_breakdown_rows = []
     breakdown_tables = {}  # Mappa (dataset, detector) -> markdown string
 
     for file_path in sorted(evaluation_files):
@@ -70,8 +71,17 @@ def main():
                 print(f"  -> Salto: Nessuna colonna score trovata in {file_path.name}")
                 continue
                 
+            # Rilevamento e rimozione di valori NaN/Inf per evitare crash di scikit-learn
+            if df["ground_truth"].isnull().any() or df[score_col].isnull().any():
+                print(f"  -> [WARNING] Rilevati valori NaN in {file_path.name}. Rimozione delle righe incomplete...")
+                df = df.dropna(subset=["ground_truth", score_col])
+                
             y_true = df["ground_truth"].values
             y_scores = df[score_col].values
+            
+            if len(np.unique(y_true)) < 2:
+                print(f"  -> [WARNING] Meno di 2 classi presenti in {file_path.name} dopo la pulizia. Salto.")
+                continue
 
             # 1. Calcolo metriche globali
             auroc = roc_auc_score(y_true, y_scores)
@@ -120,6 +130,16 @@ def main():
                         "Acc (th=0.5)": b_acc_05,
                         "EER": b_eer
                     })
+                    all_breakdown_rows.append({
+                        "Detector": detector,
+                        "Dataset": dataset,
+                        "Generator": gen,
+                        "Samples": f"{len(df_fakes)}+{len(df_reals)}",
+                        "AUROC": b_auroc,
+                        "AP": b_ap,
+                        "Acc (th=0.5)": b_acc_05,
+                        "EER": b_eer
+                    })
             else:
                 generators = df["generator"].unique()
                 for gen in sorted(generators):
@@ -139,6 +159,16 @@ def main():
                     breakdown_data.append({
                         "Generator": gen,
                         "Samples (F+R)": f"{len(df_gen)}",
+                        "AUROC": b_auroc,
+                        "AP": b_ap,
+                        "Acc (th=0.5)": b_acc_05,
+                        "EER": b_eer
+                    })
+                    all_breakdown_rows.append({
+                        "Detector": detector,
+                        "Dataset": dataset,
+                        "Generator": gen,
+                        "Samples": f"{len(df_gen)}",
                         "AUROC": b_auroc,
                         "AP": b_ap,
                         "Acc (th=0.5)": b_acc_05,
@@ -181,6 +211,13 @@ def main():
 
     # Salva CSV
     df_summary.to_csv(csv_output_path, index=False)
+
+    # Salva CSV di breakdown completo
+    if all_breakdown_rows:
+        df_all_breakdowns = pd.DataFrame(all_breakdown_rows)
+        breakdown_output_path = results_dir / "breakdown_per_generator.csv"
+        df_all_breakdowns.to_csv(breakdown_output_path, index=False)
+        print(f"Tabella breakdown per generatore salvata in: {breakdown_output_path}")
 
     print("\n" + "=" * 70)
     print("RIEPILOGO GENERALE METRICHE COMPILATO:")

@@ -68,7 +68,7 @@ def main():
     args = parser.parse_args()
 
     # === Controlla se l'inferenza è già stata completata ===
-    output_path = Path("/work/cvcs2026/deep_pixels/results") / f"cnndet-{args.dataset}.csv"
+    output_path = (Path(__file__).resolve().parent.parent / "results") / f"cnndet-{args.dataset}.csv"
     if output_path.exists():
         print(f"Risultati già presenti in {output_path}. Salto l'inferenza.")
         return

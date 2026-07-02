@@ -100,16 +100,11 @@ def main():
     parser.add_argument("--batch_size", type=int, default=16,
                         help="Batch size per l'inferenza (AIDE è pesante)")
     parser.add_argument("--num_workers", type=int, default=4)
+    parser.add_argument("--chunk_idx", type=int, default=None,
+                        help="Indice del chunk da elaborare (0-indexed)")
+    parser.add_argument("--num_chunks", type=int, default=None,
+                        help="Numero totale di chunk in cui dividere il dataset")
     args = parser.parse_args()
-
-    # === Controlla se l'inferenza è già stata completata ===
-    output_path = Path("/work/cvcs2026/deep_pixels/results") / f"{args.tag}-{args.dataset}.csv"
-    if output_path.exists():
-        print(f"Risultati già presenti in {output_path}. Salto l'inferenza.")
-        return
-
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Dispositivo utilizzato: {device}")
 
     # === 1. Mappatura Dataset e Path ===
     if args.dataset == "gan":
@@ -125,7 +120,59 @@ def main():
         openfake_dir = "/work/cvcs2026/deep_pixels/datasets/OpenFake/test_set/core/"
         d3_dir = None
 
-    # === 2. Caricamento del modello AIDE ===
+    # === 2. Inizializzazione Dataset ===
+    dataset = UnifiedDeepfakeDataset(
+        manifest_path=manifest_path,
+        openfake_parquet_dir=openfake_dir,
+        d3_parquet_dir=d3_dir,
+        transform=preprocess_aide
+    )
+
+    # === 3. Controlla se c'è un'inferenza parziale da ripristinare o completata ===
+    results = []
+    start_batch = 0
+    
+    # Gestione chunking se richiesto
+    results_dir = Path(__file__).resolve().parent.parent / "results"
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.chunk_idx is not None and args.num_chunks is not None:
+        from torch.utils.data import Subset
+        total_len = len(dataset)
+        chunk_size = (total_len + args.num_chunks - 1) // args.num_chunks
+        start_idx = args.chunk_idx * chunk_size
+        end_idx = min(start_idx + chunk_size, total_len)
+        dataset_indices = list(range(start_idx, end_idx))
+        dataset = Subset(dataset, dataset_indices)
+        output_path = results_dir / f"{args.tag}-{args.dataset}-chunk{args.chunk_idx}.csv"
+        print(f"Modalità CHUNKING attiva: Elaborazione chunk {args.chunk_idx}/{args.num_chunks} (indici {start_idx} a {end_idx})")
+    else:
+        dataset_indices = list(range(len(dataset)))
+        output_path = results_dir / f"{args.tag}-{args.dataset}.csv"
+
+    if output_path.exists():
+        try:
+            df_existing = pd.read_csv(output_path)
+            if len(df_existing) == len(dataset):
+                print(f"Risultati già completi in {output_path}. Salto l'inferenza.")
+                return
+            elif len(df_existing) > 0:
+                results = df_existing.to_dict(orient="records")
+                start_row = len(results)
+                # Ripristiniamo a partire dall'inizio del batch successivo
+                start_batch = start_row // args.batch_size
+                # Tronchiamo ad una dimensione multipla del batch size per consistenza
+                results = results[:start_batch * args.batch_size]
+                print(f"Predizioni parziali trovate in {output_path}. Ripristino dal batch {start_batch} (riga {len(results)})...")
+        except Exception as e:
+            print(f"Impossibile leggere il file parziale ({e}). Ricomincio da zero.")
+            if output_path.exists():
+                output_path.unlink()
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print(f"Dispositivo utilizzato: {device}")
+
+    # === 4. Caricamento del modello AIDE ===
     print(f"Caricamento del modello AIDE dal checkpoint: {args.checkpoint}")
     model = build_aide_model(resnet_path=None, convnext_path="laion2b_s34b_b82k_augreg_soup")
     checkpoint = torch.load(args.checkpoint, map_location="cpu")
@@ -133,14 +180,7 @@ def main():
     model = model.to(device)
     model.eval()
 
-    # === 3. Inizializzazione Dataloader ===
-    print(f"Caricamento del dataset {args.dataset.upper()}...")
-    dataset = UnifiedDeepfakeDataset(
-        manifest_path=manifest_path,
-        openfake_parquet_dir=openfake_dir,
-        d3_parquet_dir=d3_dir,
-        transform=preprocess_aide
-    )
+    # === 5. Inizializzazione Dataloader ===
     dataloader = DataLoader(
         dataset,
         batch_size=args.batch_size,
@@ -151,17 +191,21 @@ def main():
     print(f"Totale immagini: {len(dataset)}")
 
     # === 4. Inferenza ===
-    results = []
     print("Inizio inferenza su GPU...")
     with torch.no_grad():
         for i, (imgs, labels, generators, datasets) in enumerate(tqdm(dataloader, desc="Inference batches")):
+            # Saltiamo i batch già elaborati in caso di ripristino
+            if i < start_batch:
+                continue
+
             imgs = imgs.to(device)
             logits = model(imgs)  # [B, 2]
             probs = softmax(logits.cpu().numpy(), axis=1)[:, 1]  # probabilità classe fake
 
-            start_idx = i * args.batch_size
+            start_idx_batch = i * args.batch_size
             for idx_offset, prob in enumerate(probs):
-                global_idx = start_idx + idx_offset
+                local_idx = start_idx_batch + idx_offset
+                global_idx = dataset_indices[local_idx]  # Mappa l'indice locale all'indice reale del manifest
                 results.append({
                     "sample_id": global_idx,
                     "ground_truth": int(labels[idx_offset].item()),
@@ -169,7 +213,19 @@ def main():
                     f"{args.tag}_score": float(prob.item())
                 })
 
-    # === 5. Salvataggio Risultati ===
+            # Salvataggio incrementale ogni 50 batch per non perdere calcoli in caso di OOM/crash
+            if (i + 1) % 50 == 0:
+                df_results = pd.DataFrame(results)
+                output_path.parent.mkdir(parents=True, exist_ok=True)
+                df_results.to_csv(output_path, index=False)
+                
+                # Rilascio forzato della memoria PyArrow ed esecuzione Garbage Collector
+                import gc
+                import pyarrow as pa
+                gc.collect()
+                pa.default_memory_pool().release_unused()
+
+    # === 5. Salvataggio Risultati Finali ===
     output_path.parent.mkdir(parents=True, exist_ok=True)
     df_results = pd.DataFrame(results)
     df_results.to_csv(output_path, index=False)

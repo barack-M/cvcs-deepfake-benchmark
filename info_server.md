@@ -11,7 +11,10 @@
 ssh mbaracchi@ailb-login-02.ing.unimore.it
 ```
 ```bash
-cd cvcs2026/cvcs-deepfake-benchmark
+cd /homes/mbaracchi/cvcs2026/cvcs-deepfake-benchmark
+```
+```bash
+source /homes/mbaracchi/cvcs2026/venv/bin/activate
 ```
 - Username AImageLab-HPC: **mbaracchi** (diverso dallo username UNIMORE!)
 - Password: quella UNIMORE
