@@ -68,35 +68,68 @@ def main():
 
     # 2. Breakdown per Generatore (Specifico per dataset)
     print("\n--- BREAKDOWN PER GENERATORE ---")
-    generators = df["generator"].unique()
+    
+    # Rileviamo se i reali sono condivisi sotto nomi separati (es. 'imagenet', 'docci', 'real')
+    # o se sono distribuiti all'interno di ciascun generatore condividendo lo stesso nome (es. 'progan')
+    real_gens = set(df[df["ground_truth"] == 0]["generator"].unique())
+    fake_gens = set(df[df["ground_truth"] == 1]["generator"].unique())
+    
+    # Se l'intersezione è vuota, significa che le classi reali e fake non condividono i nomi dei generatori
+    # (reali = {'imagenet', 'docci'}; fake = {'flux.2-klein-9b', 'veo-3', ...})
+    is_shared_real = len(real_gens.intersection(fake_gens)) == 0
     
     breakdown_data = []
-    for gen in sorted(generators):
-        df_gen = df[df["generator"] == gen]
-        y_true_gen = df_gen["ground_truth"].values
-        y_scores_gen = df_gen[score_col].values
+    
+    if is_shared_real:
+        # D3 / OpenFake: Accoppiamo le fake di ogni generatore con TUTTI i reali del dataset
+        df_reals = df[df["ground_truth"] == 0]
         
-        # Gestione robusta nel caso in cui manchi una delle due classi per il generatore
-        if len(np.unique(y_true_gen)) < 2:
-            auroc = np.nan
-            ap = np.nan
-            eer = np.nan
-            opt_t = np.nan
-        else:
+        for gen in sorted(fake_gens):
+            df_fakes = df[(df["generator"] == gen) & (df["ground_truth"] == 1)]
+            # Uniamo le fake di questo generatore con tutti i reali
+            df_gen = pd.concat([df_fakes, df_reals])
+            
+            y_true_gen = df_gen["ground_truth"].values
+            y_scores_gen = df_gen[score_col].values
+            
             auroc = roc_auc_score(y_true_gen, y_scores_gen)
             ap = average_precision_score(y_true_gen, y_scores_gen)
             eer, opt_t = calculate_eer(y_true_gen, y_scores_gen)
+            acc_05 = accuracy_score(y_true_gen, y_scores_gen >= 0.5)
             
-        acc_05 = accuracy_score(y_true_gen, y_scores_gen >= 0.5)
-        
-        breakdown_data.append({
-            "Generator": gen,
-            "Samples": len(df_gen),
-            "AUROC": auroc,
-            "AP": ap,
-            "Acc (th=0.5)": acc_05,
-            "EER": eer
-        })
+            breakdown_data.append({
+                "Generator": gen,
+                "Samples (F+R)": f"{len(df_fakes)}+{len(df_reals)}",
+                "AUROC": auroc,
+                "AP": ap,
+                "Acc (th=0.5)": acc_05,
+                "EER": eer
+            })
+    else:
+        # GAN: I reali sono già distribuiti all'interno di ciascun generatore condividendo il nome
+        generators = df["generator"].unique()
+        for gen in sorted(generators):
+            df_gen = df[df["generator"] == gen]
+            y_true_gen = df_gen["ground_truth"].values
+            y_scores_gen = df_gen[score_col].values
+            
+            if len(np.unique(y_true_gen)) < 2:
+                auroc, ap, eer = np.nan, np.nan, np.nan
+            else:
+                auroc = roc_auc_score(y_true_gen, y_scores_gen)
+                ap = average_precision_score(y_true_gen, y_scores_gen)
+                eer, _ = calculate_eer(y_true_gen, y_scores_gen)
+                
+            acc_05 = accuracy_score(y_true_gen, y_scores_gen >= 0.5)
+            
+            breakdown_data.append({
+                "Generator": gen,
+                "Samples (F+R)": f"{len(df_gen)}",
+                "AUROC": auroc,
+                "AP": ap,
+                "Acc (th=0.5)": acc_05,
+                "EER": eer
+            })
         
     df_breakdown = pd.DataFrame(breakdown_data)
     

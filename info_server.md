@@ -10,6 +10,9 @@
 ```bash
 ssh mbaracchi@ailb-login-02.ing.unimore.it
 ```
+```bash
+cd cvcs2026/cvcs-deepfake-benchmark
+```
 - Username AImageLab-HPC: **mbaracchi** (diverso dallo username UNIMORE!)
 - Password: quella UNIMORE
 - Da fuori rete UNIMORE: serve `ssh-copy-id` la prima volta (la password resta comunque richiesta)
